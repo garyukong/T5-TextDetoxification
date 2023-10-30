@@ -1,0 +1,43 @@
+[tool.poetry]
+name = "w266_final_project"
+version = "0.1.0"
+description = ""
+authors = ["Gary Kong <garykong@berkeley.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12"
+tensorflow = "2.13.0"
+tensorflow-macos = "2.13.0"
+tensorflow-metal = "^1.0.1"
+tensorflow-datasets = "^4.9.3"
+tensorflow-text = {url = "https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon/releases/download/v2.13/tensorflow_text-2.13.0-cp311-cp311-macosx_11_0_arm64.whl"}
+pydot = "^1.4.2"
+transformers = "^4.33.2"
+numpy = "^1.23.5"
+nltk = "^3.8.1"
+matplotlib = "^3.8.0"
+scikit-learn = "^1.2.2"
+ipykernel = "^6.25.2"
+gensim = "^4.3.2"
+h5py = "^3.9.0"
+grpcio = "^1.59.0"
+ipywidgets = "^8.1.1"
+pandas = "^2.1.1"
+seaborn = "^0.13.0"
+torch = "^2.0.1"
+torchvision = "^0.15.2"
+sentence-transformers = "^2.2.2"
+pre-commit = "^3.4.0"
+black = {extras = ["jupyter"], version = "^23.9.1"}
+tf-slim = "^1.1.0"
+bleurt = { git = "https://github.com/google-research/bleurt.git" }
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 110
+target-version = ["py311"]
+include = '\.pyi?$'
