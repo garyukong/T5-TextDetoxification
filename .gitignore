@@ -91,3 +91,6 @@ models/
 
 # Everything ending in .arrow
 cache*.arrow
+
+# wandb
+notebooks/wandb/
