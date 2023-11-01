@@ -443,3 +443,71 @@ class Seq2SeqTrainerCustomLoss(Seq2SeqTrainer):
 
         # Return total loss
         return total_loss
+    
+
+def get_indices(dataset):
+    """
+    Saves the indices of data that is to_neutral and to_toxic.
+    """
+    to_neutral_idx = []
+    to_toxic_idx = []
+    for i in range(len(dataset)):
+        if dataset[i]["source"].startswith("to_neutral"):
+            to_neutral_idx.append(i)
+        else:
+            to_toxic_idx.append(i)
+
+    return to_neutral_idx, to_toxic_idx
+
+def compute_metrics_bd(eval_preds, tokenizer, bd_dataset, shuffled_data=False):
+    """
+    Function to calculate the metrics for trainer.evaluate().
+    This function is for the bi-directional model.
+    
+    Args:
+        eval_preds (tuple): Tuple containing the predictions and references
+        tokenizer (PreTrainedTokenizer): tokenizer to use for decoding the predictions
+        shuffled_data (bool): Whether the data is shuffled or not
+        bd_dataset (DatasetDict): Bidirectional dataset created using create_bidirectional_datasets e.g., raw_datasets_bd["validation"]
+
+    Returns:
+        dict: Dictionary containing the metrics
+    """
+    preds, refs = eval_preds
+
+    # In case the model returns more than the prediction logits
+    if isinstance(preds, tuple):
+        preds = preds[0]
+
+    decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
+
+    # Replace -100s in the labels as we can't decode them
+    refs = np.where(refs != -100, refs, tokenizer.pad_token_id)
+    decoded_refs = tokenizer.batch_decode(refs, skip_special_tokens=True)
+
+    # Some simple post-processing
+    decoded_preds = [pred.strip() for pred in decoded_preds]
+    decoded_refs = [ref.strip() for ref in decoded_refs]
+    
+    # If shuffled data is false, have to_neutral_preds and to_neutral_refs just be predictions and refs with even indices
+    if not shuffled_data:
+        to_neutral_preds = decoded_preds[::2]
+        to_neutral_refs = decoded_refs[::2]
+    # Otherwise, get the indices to use when splitting predictions and refs to to_neutral and to_toxic
+    else:
+        # Get the indices to use when splitting predictions and refs to to_neutral and to_toxic
+        to_neutral_idx = get_indices(bd_dataset)[0]
+
+        # Retrieve based on the indices
+        to_neutral_preds = [decoded_preds[i] for i in to_neutral_idx]
+        to_neutral_refs = [decoded_refs[i] for i in to_neutral_idx]
+    
+    # Evaluate metrics for to_neutral
+    to_neutral_metrics = evaluate_metrics(
+        to_neutral_refs,
+        to_neutral_preds,
+        to_neutral=True
+    )
+
+    # Return dictionary of to_neutral metrics
+    return to_neutral_metrics
