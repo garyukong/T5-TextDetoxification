@@ -766,3 +766,136 @@ class Seq2SeqTrainerCustomLoss(Seq2SeqTrainer):
 
         # Return total loss
         return total_loss
+    
+# Define objective function for Optuna
+def compute_objective(metrics):
+    return metrics["eval_Overall"]
+
+# Define the hyperparameter search space for Optuna
+def optuna_hp_space(trial):
+    return {
+        "classifier_loss_weight": trial.suggest_float("classifier_loss_weight", 0.0, 1.0, step=0.1),
+    }
+
+def model_init(trial):
+    return T5ForConditionalGeneration.from_pretrained("t5-small").to(DEVICE)
+
+def setup_trainer_customloss_optuna(output_dir_name,
+                train_dataset,
+                eval_dataset,
+                model_checkpoint="t5-small",
+                per_device_train_batch_size=PER_DEVICE_TRAIN_BATCH_SIZE,
+                per_device_eval_batch_size=PER_DEVICE_EVAL_BATCH_SIZE,
+                learning_rate=LEARNING_RATE,
+                num_train_epochs=NUM_TRAIN_EPOCHS,
+                max_length=MAX_OUTPUT_LENGTH,
+                num_beams=NUM_BEAMS,
+                early_stopping_patience=EARLY_STOPPING_PATIENCE,
+                classifier_loss_weight=0.5,
+                bidirectional=False,
+                ):
+    
+    # Instantiate model and tokenizer
+    model = T5ForConditionalGeneration.from_pretrained(model_checkpoint).to(DEVICE)
+    tokenizer = T5Tokenizer.from_pretrained(model_checkpoint)
+
+    # Define the data collator
+    data_collator = DataCollatorForSeq2Seq(tokenizer, model, return_tensors="pt", padding=True)
+
+    # Define generation config
+    generation_config = GenerationConfig(
+        max_length=max_length,
+        num_beams=num_beams,
+        early_stopping=True,
+        eos_token_id=model.config.eos_token_id,
+        bos_token_id=model.config.bos_token_id,
+        pad_token_id=model.config.pad_token_id,
+        decoder_start_token_id=model.config.pad_token_id
+        )
+
+    # Save the generation config
+    gen_config_path = f"../models/{output_dir_name}/generation_config"
+    generation_config.save_pretrained(gen_config_path)
+
+    # Define the training arguments
+    args = Seq2SeqTrainingArgumentsCustomLoss(
+        output_dir=f'../models/{output_dir_name}',
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        logging_strategy="epoch",
+        num_train_epochs=num_train_epochs,
+        per_device_train_batch_size=per_device_train_batch_size,
+        per_device_eval_batch_size=per_device_eval_batch_size,
+        learning_rate=learning_rate, 
+        predict_with_generate=True,
+        generation_config=gen_config_path,
+        fp16=True,
+        report_to="wandb",
+        logging_steps=100,
+        load_best_model_at_end=True,
+        metric_for_best_model="Overall",
+        greater_is_better=True,
+        generation_max_length=max_length,
+        classifier_loss_weight=classifier_loss_weight,
+        bidirectional=bidirectional,
+    )
+    
+    # Instantiate the trainer
+    trainer = Seq2SeqTrainerCustomLoss(
+        model=model,
+        tokenizer=tokenizer,
+        model_toxicity=model_toxicity,
+        tokenizer_toxicity=tokenizer_toxicity,
+        args=args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        data_collator=data_collator,
+        compute_metrics=partial(compute_metrics, tokenizer=tokenizer),
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=early_stopping_patience)],
+        model_init=model_init
+    )
+
+    return trainer
+
+# Create a sample of the raw datasets for hyperparameter optimization
+raw_datasets_sample = raw_datasets.copy()
+raw_datasets_sample["train"] = raw_datasets_sample["train"].shuffle(seed=RANDOM_SEED).select(range(2000))
+
+# Preprocess the sample
+prefixed_datasets_sample = add_prefix(raw_datasets_sample)
+
+tokenized_datasets_sample_t5_small = prefixed_datasets_sample.map(
+    preprocess_function,
+    fn_kwargs={'tokenizer': tokenizer_t5_small},
+    batched=True,
+    remove_columns=["source", "target"],
+)
+
+# Setup the trainer
+trainer_sample_t5_small_cl = setup_trainer_customloss_optuna(
+    output_dir_name="t5-small-detoxify-cl-optuna",
+    model_checkpoint="t5-small",
+    train_dataset=tokenized_datasets_sample_t5_small["train"],
+    eval_dataset=tokenized_datasets_sample_t5_small["validation"],
+    per_device_train_batch_size=PER_DEVICE_TRAIN_BATCH_SIZE,
+    per_device_eval_batch_size=PER_DEVICE_EVAL_BATCH_SIZE,
+    learning_rate=LEARNING_RATE,
+    num_train_epochs=NUM_TRAIN_EPOCHS,
+    max_length=MAX_OUTPUT_LENGTH,
+    num_beams=NUM_BEAMS,
+    early_stopping_patience=EARLY_STOPPING_PATIENCE,
+    classifier_loss_weight=0.5,
+    bidirectional=False,
+)
+
+# Run hyperparameter search
+best_trial_sample_t5_small_cl = trainer_sample_t5_small_cl.hyperparameter_search(
+    direction="maximize",
+    backend="optuna",
+    hp_space=optuna_hp_space,
+    n_trials=10,
+    study_name="optuna_t5_small_detoxify_cl",
+    compute_objective=compute_objective,
+    pruner=optuna.pruners.HyperbandPruner(), # Recommended here: https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/003_efficient_optimization_algorithms.htm
+    sampler=optuna.samplers.TPESampler(),
+)
