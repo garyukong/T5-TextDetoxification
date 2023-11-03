@@ -511,3 +511,118 @@ def compute_metrics_bd(eval_preds, tokenizer, bd_dataset, shuffled_data=False):
 
     # Return dictionary of to_neutral metrics
     return to_neutral_metrics
+
+class Seq2SeqTrainingArgumentsCustomLoss(Seq2SeqTrainingArguments):
+    def __init__(self, classifier_loss_weight, prediction_loss_weight, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.classifier_loss_weight = classifier_loss_weight
+        self.prediction_loss_weight = prediction_loss_weight
+
+class Seq2SeqTrainerCustomLoss(Seq2SeqTrainer):
+    def __init__(self, model_toxicity, tokenizer_toxicity, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.classifier_loss_weight = self.args.classifier_loss_weight
+        self.prediction_loss_weight = self.args.prediction_loss_weight
+        self.model_toxicity = model_toxicity.to(self.model.device)
+        self.tokenizer_toxicity = tokenizer_toxicity
+        self.loss_fct = torch.nn.CrossEntropyLoss().to(self.model.device)
+
+    def generate_tokens_custom(
+            self,
+            inputs: Dict[str, Union[torch.Tensor, Any]],
+            **gen_kwargs,
+        ):        
+        # Prepare the inputs
+        inputs = self._prepare_inputs(inputs)
+        
+        # Merge default generation kwargs with any user-provided kwargs
+        if len(gen_kwargs) == 0 and hasattr(self, "_gen_kwargs"):
+            gen_kwargs = self._gen_kwargs.copy()
+            
+        # Remove 'num_beams' and 'max_length' from gen_kwargs if they are None
+        if "num_beams" in gen_kwargs and gen_kwargs["num_beams"] is None:
+            gen_kwargs.pop("num_beams")
+        if "max_length" in gen_kwargs and gen_kwargs["max_length"] is None:
+            gen_kwargs.pop("max_length")
+        
+        # Set 'synced_gpus' to False in gen_kwargs
+        gen_kwargs["synced_gpus"] = False
+        
+        # Copy inputs to a new dictionary for generation
+        generation_inputs = inputs.copy()
+        
+        # Remove 'decoder_input_ids' if it was created from 'labels'
+        if ("labels" in generation_inputs and 
+            "decoder_input_ids" in generation_inputs and 
+            generation_inputs["labels"].shape == generation_inputs["decoder_input_ids"].shape):
+            generation_inputs = {k: v for k, v in inputs.items() if k != "decoder_input_ids"}
+        
+        # Generate tokens using the model
+        generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
+        
+        # Hack to ensure generation config is not initialized for each iteration (temporary)
+        if self.model.generation_config._from_model_config:
+            self.model.generation_config._from_model_config = False
+        
+        # Retrieve the GenerationConfig from the model
+        gen_config = self.model.generation_config
+        
+        # Pad generated tokens if they are shorter than max length
+        if generated_tokens.shape[-1] < gen_config.max_length:
+            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_length)
+        
+        return generated_tokens
+
+    def classifier_guided_loss(self, generated_text, target_labels):
+        # Tokenize the generated text
+        preds_tokenized = self.tokenizer_toxicity(generated_text, return_tensors="pt", padding=True)
+        
+        # Move inputs to the same device as the toxicity model
+        preds_tokenized = {key: tensor.to(self.model_toxicity.device) for key, tensor in preds_tokenized.items()}
+        
+        # Get the classifier's output logits
+        logits = self.model_toxicity(**preds_tokenized)["logits"]
+        
+        # Calculate the cross-entropy loss
+        loss = self.loss_fct(logits, target_labels)
+        
+        return loss
+
+    def compute_loss(self, model, inputs):
+        # Get outputs, predictions and prediction loss
+        outputs = model(**inputs)
+        pred_loss = outputs.loss if isinstance(outputs, dict) else outputs[0]
+
+        # Call prediction_step
+        preds, refs = self.prediction_step_custom(inputs)
+
+        # Decode predictions
+        if isinstance(preds, tuple):
+            preds = preds[0]
+        decoded_preds = self.tokenizer.batch_decode(preds, skip_special_tokens=True)
+        decoded_preds = [pred.strip() for pred in decoded_preds]
+        
+        # Decode references
+        refs = torch.where(refs != -100, refs, torch.tensor(self.tokenizer.pad_token_id).to(DEVICE))
+        decoded_refs = self.tokenizer.batch_decode(refs, skip_special_tokens=True)
+        decoded_refs = [ref.strip() for ref in decoded_refs]
+
+        # Identify indices corresponding to <to_neutral> and <to_toxic>
+        decoded_inputs = self.tokenizer.batch_decode(inputs["input_ids"], skip_special_tokens=True)
+        to_neutral_idx = [i for i, decoded_input in enumerate(decoded_inputs) if decoded_input.startswith("to_neutral")]
+        to_toxic_idx = [i for i, decoded_input in enumerate(decoded_inputs) if decoded_input.startswith("to_toxic")]
+        
+        # Calculate target labels based on indices. The length should be the same as the number of predictions
+        target_labels = torch.zeros(len(decoded_preds), dtype=torch.long, device=DEVICE)
+        target_labels[to_neutral_idx] = 0
+        target_labels[to_toxic_idx] = 1
+        
+        # Calculate the classifier-guided loss
+        classifier_loss = self.classifier_guided_loss(decoded_preds, target_labels)
+
+        # Calculate total loss as a weighted sum of the classifier loss and the prediction loss
+        total_loss = self.classifier_loss_weight * classifier_loss + self.prediction_loss_weight * pred_loss
+        print(f"Classifier-guided loss: {classifier_loss}, Prediction loss: {pred_loss}, Total loss: {total_loss}")
+
+        # Return total loss
+        return total_loss
