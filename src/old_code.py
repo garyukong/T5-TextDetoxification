@@ -899,3 +899,192 @@ best_trial_sample_t5_small_cl = trainer_sample_t5_small_cl.hyperparameter_search
     pruner=optuna.pruners.HyperbandPruner(), # Recommended here: https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/003_efficient_optimization_algorithms.htm
     sampler=optuna.samplers.TPESampler(),
 )
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def get_lengths(raw_datasets, tokenizer):
+    """
+    Get the lengths of the source and target sequences in the dataset.
+
+    Args:
+        raw_datasets (DatasetDict): dictionary containing the raw dataset
+        tokenizer (PreTrainedTokenizer): tokenizer to use for encoding the sequences
+    
+    Returns:
+        source_lengths (list): list of lengths of source sequences
+        target_lengths (list): list of lengths of target sequences
+        max_source_length (int): maximum length of source sequence
+        max_target_length (int): maximum length of target sequence
+    """
+    train_source_lengths = [len(tokenizer(x)["input_ids"]) for x in raw_datasets["train"]["source"]]
+    val_source_lengths = [len(tokenizer(x)["input_ids"]) for x in raw_datasets["validation"]["source"]]
+    test_source_lengths = [len(tokenizer(x)["input_ids"]) for x in raw_datasets["test"]["source"]]
+    source_lengths = train_source_lengths + val_source_lengths + test_source_lengths
+    max_source_length = max(source_lengths)
+
+    train_target_lengths = [len(tokenizer(x)["input_ids"]) for x in raw_datasets["train"]["target"]]
+    val_target_lengths = [len(tokenizer(x)["input_ids"]) for x in raw_datasets["validation"]["target"]]
+    test_target_lengths = [len(tokenizer(x)["input_ids"]) for x in raw_datasets["test"]["target"]]
+    target_lengths = train_target_lengths + val_target_lengths + test_target_lengths
+    max_target_length = max(target_lengths)
+    
+    return source_lengths, target_lengths, max_source_length, max_target_length
+
+def plot_lengths(source_lengths, target_lengths):
+    """
+    Plot the distribution of lengths of source and target sequences.
+
+    Args:
+        source_lengths (list): list of lengths of source sequences
+        target_lengths (list): list of lengths of target sequences
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    sns.histplot(source_lengths, ax=axes[0])
+    sns.histplot(target_lengths, ax=axes[1])
+    axes[0].set_title("Source Lengths")
+    axes[1].set_title("Target Lengths")
+    axes[0].set_xlabel("Length")
+    axes[1].set_xlabel("Length")
+    axes[0].set_ylabel("Count")
+    axes[1].set_ylabel("Count")
+    axes[0].set_xlim(0, 100)
+    axes[1].set_xlim(0, 100)
+
+# Get distribution of lengths of source across train, val, and test
+bart_source_lengths, bart_target_lengths, bart_max_source_length, bart_max_target_length = get_lengths(raw_datasets, AutoTokenizer.from_pretrained("s-nlp/bart-base-detox"))
+
+# Check what lengths would be after tokenization with t5
+t5_source_lengths, t5_target_lengths, t5_max_source_length, t5_max_target_length = get_lengths(raw_datasets, AutoTokenizer.from_pretrained("t5-base"))
+
+# Print max lengths
+print("Maximum source length for BART:", bart_max_source_length)
+print("Maximum target length for BART:", bart_max_target_length)
+print("Maximum source length for T5:", t5_max_source_length)
+print("Maximum target length for T5:", t5_max_target_length)
+
+###
+### Code to compare the performance of t5-small-detoxify with the best and minimum loss checkpoints
+###
+
+# Define checkpoint paths
+CHECKPOINT_T5_SMALL_MINLOSS = "../models/t5-small-detoxify-2/checkpoint-1680" # Epoch 5, min loss
+CHECKPOINT_T5_SMALL_BEST = "../models/t5-small-detoxify-2/checkpoint-840" # Epoch 15, best overall
+
+# The trainer object for t5-small-detoxify is already the best model, so we can just load it
+trainer_t5_small_best = setup_trainer(
+    output_dir_name="t5-small-detoxify",
+    model_checkpoint=CHECKPOINT_T5_SMALL_BEST,
+    train_dataset=tokenized_datasets_t5_small["train"],
+    eval_dataset=tokenized_datasets_t5_small["validation"],
+)
+
+# Load the trainer object for t5-small-detoxify with the minimum loss
+trainer_t5_small_minloss = setup_trainer(
+    output_dir_name="t5-small-detoxify",
+    model_checkpoint=CHECKPOINT_T5_SMALL_MINLOSS,
+    train_dataset=tokenized_datasets_t5_small["train"],
+    eval_dataset=tokenized_datasets_t5_small["validation"],
+)
+
+# Get predictions from trainer objects
+def get_preds_df (trainer_1=trainer_t5_small_best,
+                  trainer_2=trainer_t5_small_minloss,
+                  tokenizer=tokenizer_t5_small,
+                  tokenized_data=tokenized_datasets_t5_small["validation"],
+                  raw_data=raw_datasets["validation"]):
+    """
+    Gets the predictions from a trainer object and returns a dataframe containing the source, target, and prediction.
+
+    Args:
+        trainer_object (Seq2SeqTrainer): trainer object containing the model
+        tokenized_data (Dataset): dataset to be evaluated
+        raw_data (Dataset): dataset containing the raw data
+
+    Returns:
+        preds (Seq2SeqPrediction): Seq2SeqPrediction object containing the predictions
+        decoded_preds (list): list of decoded predictions
+        df (DataFrame): dataframe containing the source, target, and prediction
+    """
+    
+    # Get predictions
+    preds_1 = trainer_1.predict(tokenized_data)
+    decoded_preds_1 = tokenizer.batch_decode(preds_1.predictions, skip_special_tokens=True)
+    preds_2 = trainer_2.predict(tokenized_data)
+    decoded_preds_2 = tokenizer.batch_decode(preds_2.predictions, skip_special_tokens=True)
+
+    # Create dataframe containing source, target, and prediction
+    df = pd.DataFrame()
+    df["source"] = raw_data["source"]
+    df["target"] = raw_data["target"]
+    df["pred_1"] = decoded_preds_1
+    df["pred_2"] = decoded_preds_2
+    
+    return df
+
+# Get predictions for t5-small-detoxify
+t5_small_df = get_preds_df(trainer_1=trainer_t5_small_best,
+                                trainer_2=trainer_t5_small_minloss,
+                                tokenizer=tokenizer_t5_small,
+                                tokenized_data=tokenized_datasets_t5_small["validation"],
+                                raw_data=raw_datasets["validation"])
+
+# # Calculate relevant metric columns for t5_small_df
+# t5_small_df["pred_1_BLEURT"] = calc_bleurt(t5_small_df["target"], t5_small_df["pred_1"], output_mean=False)
+# t5_small_df["pred_2_BLEURT"] = calc_bleurt(t5_small_df["target"], t5_small_df["pred_2"], output_mean=False)
+t5_small_df["pred_1_toxic_class"] = calc_tox_acceptability(t5_small_df["pred_1"].tolist(), tokenizer_toxicity, model_toxicity, output_score=False, output_mean=False)
+t5_small_df["pred_2_toxic_class"] = calc_tox_acceptability(t5_small_df["pred_2"].tolist(), tokenizer_toxicity, model_toxicity, output_score=False, output_mean=False)
+t5_small_df["pred_1_toxic_score"] = calc_tox_acceptability(t5_small_df["pred_1"].tolist(), tokenizer_toxicity, model_toxicity, output_score=True, output_mean=False)
+t5_small_df["pred_2_toxic_score"] = calc_tox_acceptability(t5_small_df["pred_2"].tolist(), tokenizer_toxicity, model_toxicity, output_score=True, output_mean=False)
+t5_small_df["source_acceptability"] = calc_tox_acceptability(t5_small_df["source"].tolist(), tokenizer_acceptability, model_acceptability, output_score=True, output_mean=False)
+t5_small_df["target_acceptability"] = calc_tox_acceptability(t5_small_df["target"].tolist(), tokenizer_acceptability, model_acceptability, output_score=True, output_mean=False)
+t5_small_df["pred_1_acceptability"] = calc_tox_acceptability(t5_small_df["pred_1"].tolist(), tokenizer_acceptability, model_acceptability, output_score=True, output_mean=False)
+t5_small_df["pred_2_acceptability"] = calc_tox_acceptability(t5_small_df["pred_2"].tolist(), tokenizer_acceptability, model_acceptability, output_score=True, output_mean=False)
+t5_small_df["pred_1_BERT_score"] = calc_bert_score(t5_small_df["target"], t5_small_df["pred_1"], model_type="distilbert-base-uncased", output_mean=False)[2]
+t5_small_df["pred_2_BERT_score"] = calc_bert_score(t5_small_df["target"], t5_small_df["pred_2"], model_type="distilbert-base-uncased", output_mean=False)[2]
+
+# Calculate differences in BLEURT, toxicity, acceptability, and BERT score
+t5_small_df["diff_toxic_score"] = t5_small_df["pred_1_toxic_score"] - t5_small_df["pred_2_toxic_score"]
+# t5_small_df["diff_BLEURT"] = t5_small_df["pred_1_BLEURT"] - t5_small_df["pred_2_BLEURT"]
+t5_small_df["diff_acceptability"] = t5_small_df["pred_1_acceptability"] - t5_small_df["pred_2_acceptability"]
+t5_small_df["diff_BERT_score"] = t5_small_df["pred_1_BERT_score"] - t5_small_df["pred_2_BERT_score"]
+
+# Filter to rows where pred_1_toxicity is less than pred_2_toxicity
+t5_small_df_filtered = t5_small_df[t5_small_df["pred_1_toxic_class"] < t5_small_df["pred_2_toxic_class"]]
+
+# Print as individual lines
+for index, row in t5_small_df_filtered.head(10).iterrows():
+    print("Index:", index)
+    print("Source:", row["source"])
+    print("Target:", row["target"])
+    print("Prediction (Best model):", row["pred_1"])
+    print("Prediction (Min val error):", row["pred_2"])
+    print("Diff in toxicity:", round(row["diff_toxic_score"], 3))
+    # print("Diff in BLEURT:", round(row["diff_BLEURT"], 3))
+    print("Diff in acceptability:", round(row["diff_acceptability"], 3))
+    print("Diff in BERT:", round(row["diff_BERT_score"], 3))
+    print()
+
+### 
+### T5 Base Training
+### 
+prefixed_datasets = add_prefix(raw_datasets)
+
+tokenized_datasets_t5_base = prefixed_datasets.map(
+    preprocess_function,
+    fn_kwargs={'tokenizer': tokenizer_t5_base},
+    batched=True,
+    remove_columns=["source", "target"],
+)
+
+trainer_t5_base = setup_trainer(
+    output_dir_name="t5-base-detoxify-2",
+    model_checkpoint="t5-base",
+    train_dataset=tokenized_datasets_t5_base["train"],
+    eval_dataset=tokenized_datasets_t5_base["validation"],
+    learning_rate=1e-4
+)
+
+wandb.init(project="w266_final_project", name="t5-base-detoxify-2")
+trainer_t5_base.train()
+wandb.finish()
