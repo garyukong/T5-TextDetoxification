@@ -85,12 +85,3 @@ target/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
-
-# All subdirectories and files in models/
-models/
-
-# Everything ending in .arrow
-cache*.arrow
-
-# wandb
-notebooks/wandb/
