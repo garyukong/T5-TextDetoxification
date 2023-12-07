@@ -20,7 +20,7 @@ This repository hosts the code and data for the project "Advanced Text Detoxific
 
 ## Data Description
 
-- `raw/`: Original, unmodified datasets mainly sourced from https://github.com/s-nlp/paradetox
+- `raw/`: Original, unmodified datasets sourced from [ParaDetox] (https://github.com/s-nlp/paradetox).
 - `interim/`: Intermediate data files used during processing.
 - `processed/`: Final datasets used for model training and evaluation.
 
