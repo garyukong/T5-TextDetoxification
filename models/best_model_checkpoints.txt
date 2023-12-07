@@ -1,0 +1,8 @@
+t5_small_unidir: ../models/t5_small_unidir/checkpoint-840
+t5_small_bidir_noshuf: ../models/t5_small_bidir_noshuf/checkpoint-2352
+t5_small_bidir_shuf: ../models/t5_small_bidir_shuf/checkpoint-3024
+t5_small_aug_all: ../models/t5_small_aug_all/checkpoint-2592
+t5_small_aug_noaccept: ../models/t5_small_aug_noaccept/checkpoint-1620
+t5_small_aug_nosim: ../models/t5_small_aug_nosim/checkpoint-2592
+t5_small_aug_notox: ../models/t5_small_aug_notox/checkpoint-1944
+t5_small_bidir_aug_nosim: ../models/t5_small_bidir_aug_nosim/checkpoint-1944
