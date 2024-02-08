@@ -58,10 +58,10 @@ Project Organization
     ├── models                                                         <- Pre-trained models directory.
     │
     ├── notebooks                                                      <- Jupyter notebooks for preprocessing, training, and evaluation.
-    |   ├── 1_Data_Preprocessing.ipynb                                                  <- Processed datasets ready for model training.
-    │   ├── 2_Data_Augmentation.ipynb                                                        <- Original, unmodified datasets.
-    │   └── 3_Model_Training.ipynb                                                    <- Data at intermediate processing stages.
-    │   └── 4_Evaluation.ipynb                                                    <- Data at intermediate processing stages.
+    |   ├── 1_Data_Preprocessing.ipynb                                 
+    │   ├── 2_Data_Augmentation.ipynb                                  
+    │   └── 3_Model_Training.ipynb                                     
+    │   └── 4_Evaluation.ipynb                                         
     │
     ├── results                                                        <- Stored results from model evaluations.
     │
