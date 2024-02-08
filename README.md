@@ -1,58 +1,68 @@
 # Advanced Text Detoxification Techniques With T5 Models
 
-## Overview
+## Introduction
 
-This repository hosts the code and data for the project "Advanced Text Detoxification Techniques With T5 Models: A Comparative Analysis Against BART". The project aims to enhance text detoxification using T5 models, incorporating advanced techniques such as bidirectional training, data augmentation, and negative lexically constrained decoding.
+The prevalence of toxic comments on online platforms has escalated the need for sophisticated text detoxification methods. This project introduces an innovative approach using T5 models, titled "Advanced Text Detoxification Techniques With T5 Models: A Comparative Analysis Against BART". It focuses on enhancing the capabilities of T5 models through bidirectional training, data augmentation, and negative lexically constrained decoding (NLCD), aiming to set new benchmarks in text detoxification.
 
-## Key Findings
+## Goals
 
-- **T5 Model Performance**: T5 models, especially when enhanced with bidirectional training, data augmentation, and negative lexically constrained decoding, showed competitive or superior performance in text detoxification compared to BART models.
-- **Impact of Advanced Techniques**: The integration of bidirectional training and data augmentation improved the style transfer accuracy and semantic integrity of the T5 models.
-- **Effectiveness of NLCD**: Negative Lexically Constrained Decoding (NLCD) proved to be a pivotal technique in enhancing the T5 models' ability to maintain context while avoiding toxic expressions.
+- To evaluate the effectiveness of T5 models, enhanced through advanced techniques, for text detoxification tasks.
+- To conduct a comparative analysis of T5 models against BART models, assessing their performance in maintaining style transfer accuracy and semantic integrity.
+- To explore the contributions of bidirectional training, data augmentation, and NLCD to the field of text detoxification.
 
-## Repository Structure
+## Dataset
 
-- `data/`: Contains raw, interim, and processed datasets used for training and evaluation.
-- `docs/`: Documentation and related materials, including the project paper and proposal.
-- `notebooks/`: Jupyter notebooks for data preprocessing, model training, and evaluation.
-- `results/`: Results from model evaluation and hyperparameter tuning experiments.
-- `requirements.txt`: List of Python packages required to run the code.
+The project utilizes the ParaDetox dataset, a comprehensive collection designed for the detoxification of text, encompassing a wide range of toxic comments for model evaluation.
 
-## Data Description
+### Source:
+[ParaDetox Project](https://github.com/s-nlp/paradetox)
 
-- `raw/`: Original, unmodified datasets sourced from [ParaDetox](https://github.com/s-nlp/paradetox).
-- `interim/`: Intermediate data files used during processing.
-- `processed/`: Final datasets used for model training and evaluation.
+## Methodology
 
-## Documentation
+1. **Data Preprocessing**: Initial steps involve cleaning and preparing the raw data for the training process.
+2. **Data Augmentation**: Techniques like back-translation are used to enrich the training dataset, enhancing model robustness.
+3. **Model Training**: Employs advanced T5 models, comparing them directly with BART models to gauge performance improvements.
+4. **Evaluation**: Utilizes a suite of metrics to assess and compare the detoxification effectiveness of the models.
 
-- `T5_TextDetoxification_Paper.pdf`: Detailed research paper.
-- `T5_TextDetoxification_Proposal.gdoc`: Initial project proposal.
+## Results
 
-## Model Setup
+The study reveals that T5 models, particularly when augmented with the proposed advanced techniques, outperform BART models in text detoxification. The implementation of NLCD stands out as a significant enhancement, enabling the models to better navigate the complexities of toxic language mitigation while preserving content fidelity.
 
-For the Jupyter notebooks to run properly, it is essential to download the pre-trained models and save them in a `models/` directory within the project. Follow these steps:
+## Usage
 
-1. **Download Models**:
-   - Access the Google Drive folder containing the models: [T5-Small Detoxification Models](https://drive.google.com/drive/u/0/folders/1CmWYk0qtGmvLQsvnIJmNEDctkvs-0PDR).
-   - Download the necessary model files to your local machine.
+To leverage this work for your purposes:
 
-2. **Move Downloaded Models**:
-   - Move or copy the downloaded model files into the `models/` directory.
+1. **Clone the Repository**: Access the code and resources by cloning the GitHub repository.
+2. **Install Dependencies**: Set up your environment by installing the necessary Python packages listed in `requirements.txt`.
+3. **Download Pre-trained Models**: Ensure the models are available locally by downloading them from the provided Google Drive link and placing them in the `models/` directory.
 
-After completing these steps, the Jupyter notebooks located in the `notebooks/` directory should be able to locate and utilize the models correctly.
+- Models Download Link: [T5-Small Detoxification Models on Google Drive](https://drive.google.com/drive/u/0/folders/1CmWYk0qtGmvLQsvnIJmNEDctkvs-0PDR)
 
-## Notebooks
+4. **Run the Notebooks**: Execute the Jupyter notebooks within the `notebooks/` directory to replicate the data processing, model training, and evaluation steps.
 
-- `1_Data_Preprocessing.ipynb`: Cleans and converts raw data into Huggingface DatasetDict objects with appropriate train, validation and test splits
-- `2_Data_Augmentation.ipynb`: Builds augmented datasets using back-translation
-- `3_Model_Training.ipynb`: Trains variants of T5-Small models using Huggingface Trainer
-- `4_Evaluation.ipynb`: Evaluates baseline and T5-Small models
+## Future Work
 
-## Installation
+Potential future directions include investigating the integration of T5 models with additional linguistic features and datasets to further refine detoxification strategies. The nuanced impact of NLCD across diverse toxic content types also presents an intriguing area for deeper exploration.
 
-```bash
-git clone https://github.com/garyukong/[YourRepoName].git
-conda create --name [YourNewEnvName] --file requirements.txt
-conda activate [YourNewEnvName]
-```
+Project Organization
+------------
+
+    ├── README.md                                                      
+    ├── data
+    │   ├── processed                                                  <- Processed datasets ready for model training.
+    │   ├── raw                                                        <- Original, unmodified datasets.
+    │   └── interim                                                    <- Data at intermediate processing stages.
+    │
+    ├── docs                                                           <- Documentation including project papers and proposals.
+    │
+    ├── models                                                         <- Pre-trained models directory.
+    │
+    ├── notebooks                                                      <- Jupyter notebooks for preprocessing, training, and evaluation.
+    |   ├── 1_Data_Preprocessing.ipynb                                                  <- Processed datasets ready for model training.
+    │   ├── 2_Data_Augmentation.ipynb                                                        <- Original, unmodified datasets.
+    │   └── 3_Model_Training.ipynb                                                    <- Data at intermediate processing stages.
+    │   └── 4_Evaluation.ipynb                                                    <- Data at intermediate processing stages.
+    │
+    ├── results                                                        <- Stored results from model evaluations.
+    │
+    └── requirements.txt                                               <- Python package requirements for the project.
